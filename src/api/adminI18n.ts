@@ -1,18 +1,19 @@
 import { Router } from 'express';
-import { requireServiceAuth } from '../middleware/serviceAuth';
+import { requireServiceOrApiKey } from '../middleware/serviceAuth';
 import { getPrisma } from '../db/client';
 
 const router = Router();
-router.use(requireServiceAuth);
 
 // Upsert translation entry
-router.post('/v1/admin/i18n/upsert', async (req, res) => {
+router.post('/v1/admin/i18n/upsert', requireServiceOrApiKey(['admin:write']), async (req, res) => {
   try {
     const { tenantSlug, key, locale, text } = (req.body || {}) as { tenantSlug?: string; key?: string; locale?: string; text?: string };
-    if (!tenantSlug || !key || !locale || !text) return res.status(400).json({ error: 'missing_params' });
+    if (!tenantSlug || !key || !locale || !text) return res.status(400).json({ error: { code: 'missing_params' } });
     const prisma = getPrisma();
     const t = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
-    if (!t) return res.status(404).json({ error: 'tenant_not_found' });
+    if (!t) return res.status(404).json({ error: { code: 'tenant_not_found' } });
+    const apiKey = (req as any).apiKey as { tenantId: string } | undefined;
+    if (apiKey && apiKey.tenantId !== t.id) return res.status(403).json({ error: { code: 'cross_tenant_forbidden' } });
     const data: any = { tenantId: t.id, key, locale: locale.toLowerCase(), text };
     const row = await (prisma as any).messageTemplateLocale.upsert({ // reuse same table for simplicity
       where: { tenantId_key_locale: { tenantId: t.id, key, locale: data.locale } },
@@ -21,7 +22,7 @@ router.post('/v1/admin/i18n/upsert', async (req, res) => {
     });
     return res.json({ id: row.id });
   } catch (e: any) {
-    return res.status(500).json({ error: 'internal_error', detail: e?.message });
+    return res.status(500).json({ error: { code: 'internal_error', message: e?.message } });
   }
 });
 

@@ -1,4 +1,5 @@
 let wsConnections = 0;
+const wsConnectionsByTenant = new Map<string, number>();
 let wsOutboundMessagesTotal = 0;
 let rateLimitHitsTotal = 0;
 const rateLimitHitsByBucket = new Map<string, number>();
@@ -29,6 +30,9 @@ export function incRateLimitHit(bucketName: string) {
 export function getMetricsText(): string {
   const lines: string[] = [];
   lines.push(`ws_connections ${wsConnections}`);
+  for (const [tenant, count] of wsConnectionsByTenant.entries()) {
+    lines.push(`ws_connections_tenant{tenant="${escapeLabel(tenant)}"} ${count}`);
+  }
   lines.push(`ws_outbound_messages_total ${wsOutboundMessagesTotal}`);
   lines.push(`rate_limit_hits_total ${rateLimitHitsTotal}`);
   lines.push(`telegram_sends_total ${telegramSendsTotal}`);
@@ -71,6 +75,13 @@ export function incRateLimitHitForTenant(bucketName: string, tenantId: string) {
   const key = `${tenantId}|${bucketName}`;
   const prev = rateLimitHitsByTenantBucket.get(key) || 0;
   rateLimitHitsByTenantBucket.set(key, prev + 1);
+}
+
+export function incWsConnectionsForTenant(tenantId: string, delta: number) {
+  const prev = wsConnectionsByTenant.get(tenantId) || 0;
+  let next = prev + delta;
+  if (next < 0) next = 0;
+  wsConnectionsByTenant.set(tenantId, next);
 }
 
 

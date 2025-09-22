@@ -1,10 +1,11 @@
 #!/usr/bin/env node
+process.env.KMS_MASTER_KEY_FILE = process.env.KMS_MASTER_KEY_FILE || '/etc/chatorical/secrets/kms_master_key';
 const { PrismaClient } = require('@prisma/client');
 const { upsertTelegramChannel } = require('../dist/channels/telegram/adapter');
 
 async function main() {
   const prisma = new PrismaClient();
-  const slug = process.env.TENANT_SLUG || 'motorical-smtp';
+  const slug = process.env.TENANT_SLUG || 'default';
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const supportGroupId = process.env.SUPPORT_GROUP_ID;
   const webhookSecret = process.env.WEBHOOK_SECRET;

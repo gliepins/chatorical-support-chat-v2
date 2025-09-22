@@ -8,13 +8,26 @@ async function getTenantIdBySlug(slug) {
     if (slugToIdCache.has(slug))
         return slugToIdCache.get(slug);
     const prisma = (0, client_1.getPrisma)();
-    const t = await prisma.tenant.findUnique({ where: { slug } });
+    let t = await prisma.tenant.findUnique({ where: { slug } });
+    if (!t && slug === 'default') {
+        try {
+            t = await prisma.tenant.create({ data: { name: 'Default', slug: 'default' } });
+        }
+        catch {
+            t = await prisma.tenant.findUnique({ where: { slug } });
+        }
+    }
     if (!t)
         throw new Error('tenant_not_found');
     slugToIdCache.set(slug, t.id);
     return t.id;
 }
 async function resolveTenantContextAsync(req) {
+    // Prefer API key-derived tenant if present
+    const apiKey = req.apiKey;
+    if (apiKey && apiKey.tenantId) {
+        return { tenantId: apiKey.tenantId };
+    }
     const header = req.header('x-tenant-id');
     const slug = (header && header.trim()) || 'default';
     const tenantId = await getTenantIdBySlug(slug);

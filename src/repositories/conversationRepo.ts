@@ -53,6 +53,27 @@ export async function addAgentOutboundMessage(tenantId: string, conversationId: 
   return msg;
 }
 
+export async function addAgentInboundMessage(tenantId: string, conversationId: string, text: string) {
+  const prisma = getPrisma();
+  const trimmed = text.trim();
+  if (!trimmed) return null as any;
+  const msg = await prisma.message.create({
+    data: { tenantId, conversationId, direction: 'INBOUND' as any, text: trimmed },
+  });
+  // Agent responded (inbound to customer), still update lastAgentAt
+  await prisma.conversation.update({ where: { id: conversationId }, data: { lastAgentAt: new Date() } });
+  return msg;
+}
+
+export async function setConversationThreadId(tenantId: string, conversationId: string, threadId: number) {
+  const prisma = getPrisma();
+  const conv = await prisma.conversation.update({ where: { id: conversationId }, data: { threadId } });
+  if (conv.tenantId !== tenantId) {
+    throw new Error('cross_tenant_forbidden');
+  }
+  return conv as any;
+}
+
 export async function findOrCreateRootConversation(tenantId: string, title?: string) {
   const prisma = getPrisma();
   const existing = await prisma.conversation.findFirst({ where: { tenantId, threadId: null } as any });
@@ -65,6 +86,31 @@ export async function findOrCreateRootConversation(tenantId: string, title?: str
     ...(title ? { aboutNote: title } : {}),
   };
   return (prisma as any).conversation.create({ data });
+}
+
+export async function updateConversationName(tenantId: string, conversationId: string, name: string) {
+  const prisma = getPrisma();
+  const trimmed = name.trim();
+  if (trimmed.length === 0) throw new Error('name_required');
+  const conv = await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { customerName: trimmed },
+  });
+  if (conv.tenantId !== tenantId) {
+    throw new Error('cross_tenant_forbidden');
+  }
+  return conv as any;
+}
+
+export async function addCustomerInboundMessage(tenantId: string, conversationId: string, text: string) {
+  const prisma = getPrisma();
+  const trimmed = (text || '').trim();
+  if (!trimmed) throw new Error('empty_message');
+  const conv = await prisma.conversation.findFirst({ where: { tenantId, id: conversationId } });
+  if (!conv) throw new Error('conversation_not_found');
+  const msg = await prisma.message.create({ data: { tenantId, conversationId, direction: 'INBOUND' as any, text: trimmed } });
+  await prisma.conversation.update({ where: { id: conversationId }, data: { lastCustomerAt: new Date() } });
+  return msg;
 }
 
 

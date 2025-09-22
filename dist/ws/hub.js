@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.addClientToConversation = addClientToConversation;
 exports.removeClientFromConversation = removeClientFromConversation;
 exports.broadcastToConversation = broadcastToConversation;
+const metrics_1 = require("../telemetry/metrics");
 const conversationIdToClients = new Map();
 function addClientToConversation(conversationId, ws) {
     let set = conversationIdToClients.get(conversationId);
@@ -28,6 +29,7 @@ function broadcastToConversation(conversationId, payload) {
     for (const ws of set) {
         try {
             ws.send(data);
+            (0, metrics_1.incWsOutbound)(1);
         }
         catch { }
     }

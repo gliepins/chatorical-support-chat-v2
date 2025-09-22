@@ -6,17 +6,20 @@ import dotenv from 'dotenv';
 (() => {
   try { dotenv.config({ path: path.join(process.cwd(), '.env') }); } catch {}
   try {
-    const systemEnv = '/etc/support-chat-v2.env';
+    const systemEnv = '/etc/chatorical/support-chat-v2.env';
     if (fs.existsSync(systemEnv)) {
       dotenv.config({ path: systemEnv });
     }
   } catch {}
 })();
 
-export function readSecretFile(filePathEnvName: string, fallbackEnvName?: string): string | undefined {
+export function readSecretFile(filePathEnvName: string, fallbackEnvName?: string, defaultPath?: string): string | undefined {
   const p = (process.env as any)[filePathEnvName];
   if (p && typeof p === 'string') {
     try { return fs.readFileSync(p, 'utf8').trim(); } catch {}
+  }
+  if (defaultPath && fs.existsSync(defaultPath)) {
+    try { return fs.readFileSync(defaultPath, 'utf8').trim(); } catch {}
   }
   if (fallbackEnvName) {
     const v = (process.env as any)[fallbackEnvName];
@@ -37,9 +40,9 @@ export const CONFIG = {
   featureTenantEnforced: String(process.env.FEATURE_TENANT_CONTEXT_ENFORCED || 'false').toLowerCase() === 'true',
   logPretty: String(process.env.LOG_PRETTY || 'true').toLowerCase() === 'true',
   logLevel: String(process.env.LOG_LEVEL || 'info'),
-  s2sToken: readSecretFile('S2S_TOKEN_FILE', 'SERVICE_TOKEN'),
-  jwtSecret: readSecretFile('CONVERSATION_JWT_SECRET_FILE', 'CONVERSATION_JWT_SECRET'),
-  kmsMasterKey: readSecretFile('KMS_MASTER_KEY_FILE'),
+  s2sToken: readSecretFile('S2S_TOKEN_FILE', 'SERVICE_TOKEN', '/etc/chatorical/secrets/s2s_token'),
+  jwtSecret: readSecretFile('CONVERSATION_JWT_SECRET_FILE', 'CONVERSATION_JWT_SECRET', '/etc/chatorical/secrets/conversation_jwt_secret'),
+  kmsMasterKey: readSecretFile('KMS_MASTER_KEY_FILE', undefined, '/etc/chatorical/secrets/kms_master_key'),
 };
 
 

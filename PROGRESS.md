@@ -37,36 +37,30 @@ Last updated: 2025-09-22
 - [x] Add admin/test endpoint and basic health checks
 - [x] TenantContext enforced across repositories/controllers; cross-tenant tests (M2)
 - [x] API keys and admin endpoints for issue/list/revoke (M3)
-- [ ] Persist and load tenant settings per environment
-- [ ] Add authentication/authorization flows (roles/scopes across admin APIs)
-- [ ] Observability (structured logs, tracing, metrics)
+- [x] Persist and load tenant settings per environment (initial buckets, flags)
+- [x] Add authorization scopes across admin APIs (API key scopes enforced)
+- [x] Observability (structured logs, optional OTLP tracing, per-tenant metrics)
 - [x] Redis pub/sub WS fan-out + distributed rate limits + metrics (M1)
-- [ ] E2E tests for Telegram flow and WS updates
-- [ ] CI/CD pipeline and deployment configuration
+- [x] E2E tests for Telegram flow and WS updates (smoke + limits)
+- [x] CI/CD pipeline and deployment configuration (release workflow + smoke tests)
 - [x] Outbox worker with retries and idempotency; admin enqueue (M5)
 - [x] Templates/i18n APIs (M6) — admin upsert/list/delete, preview with fallback, public i18n
- - [x] CI: GitHub Actions workflow runs full smoke/E2E test suite on PRs/push
- - [x] M4 hardening: webhook metrics (ok/unauthorized/idempotent-skipped/parse-errors), stricter header secret, capped retry_after
+  - [x] CI: GitHub Actions workflow runs full smoke/E2E test suite on PRs/push
+  - [x] M4 hardening: webhook metrics (ok/unauthorized/idempotent-skipped/parse-errors), stricter header secret, capped retry_after
+  - [x] Ops hardening: env+secrets relocated to /etc/chatorical; systemd unit updated
 
 ### In progress
 
-- Documentation: establishing this progress log and usage notes
-- Webhook resilience: Telegram retry/backoff + idempotency metrics (M4)
-- Templates/i18n APIs (M6) — starting with admin endpoints
-  - Admin endpoints done; preview + public i18n done
-- CI/ops: stabilize Redis hub reconnections and logging enrichment (done)
-- Tenant settings service and admin endpoints
+- Tenant settings expansion (rate limits per route, feature flags) — ongoing
+- Jobs: retention for closed conversations (worker added), audit exports (next)
+- CI: add migrate + restart step template; branch protection docs
+- Ops: finalize real bot token/group id and permissions on stage
 
 ### Next up (backlog)
 
-- Implement tenant-level configuration persistence and retrieval API
-- Add standardized error handling and response envelopes
-- Introduce request tracing and correlation IDs
-- Harden WebSocket reconnection and presence tracking
-- Add integration tests covering Telegram inbound → conversation → WS broadcast
-  - [done] E2E inbound + WS broadcast smoke tests
-- Domain events + outbox worker with retries and idempotency (M5)
-  - [done] basic outbox and worker, admin enqueue
+- Widget v2 bootstrap (short‑lived WS token), i18n fetch, minimal UI stub
+- Presence tracking and stronger WS reconnection logic
+- Billing hooks and plan-based limits
 
 ### Open questions / decisions to document
 
@@ -82,6 +76,18 @@ Last updated: 2025-09-22
 - 2025-09-22: Completed M2 (TenantContext + cross-tenant tests) and M3 (API keys + admin)
 - 2025-09-22: Completed M5 (Outbox + worker + admin enqueue); starting M6 templates APIs
 - 2025-09-22: Completed M6 templates/i18n (admin + preview + public); added E2E tests
+- 2025-09-22: Enforced API key scopes across admin endpoints; standardized error envelopes
+- 2025-09-22: Added per-tenant metrics, optional OTLP tracing, WS origin checks by tenant
+- 2025-09-22: Telegram webhook per-tenant rate limit and disable flag; tests added
+- 2025-09-22: Retention worker implemented with test; CI Release workflow with smoke tests
+- 2025-09-22: Widget v2 bootstrap implemented (short‑lived WS token endpoint, minimal UI with send/history/i18n/status/reconnect)
+- 2025-09-22: Public send endpoint added; tests and CI updated
+- 2025-09-22: Stage site configured via Nginx with SSL; widget served at https://stage.chatorical.com
+- 2025-09-22: CORS fixed for stage; WS upgrade via Nginx verified; widget connects
+- 2025-09-22: KMS master key wired (file perms and env dedup); admin Telegram config save works
+- 2025-09-22: Widget↔Telegram bridge added (thread-aware send); inbound direction fixed to INBOUND
+- 2025-09-22: Auto-create Telegram forum topic per conversation on first send; fallback to configurable `telegram.defaultTopicId`
+- 2025-09-22: Telegram webhook aligned (secret/header) and inbound verified on stage; added idempotency + per-tenant limiter
 
 ### How to update this document
 

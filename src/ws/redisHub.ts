@@ -18,7 +18,7 @@ export function startRedisHub(): void {
   started = true;
   try {
     publisher = getRedis();
-    subscriber = new Redis(CONFIG.redisUrl);
+    subscriber = getRedis();
     const pattern = `${CONFIG.redisKeyPrefix}ws:conv:*`;
     subscriber.on('end', () => { try { logger.warn({ event: 'redis_subscriber_end' }); } catch {} });
     subscriber.on('error', (e) => { try { logger.error({ event: 'redis_subscriber_error', err: e }); } catch {} });

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { CONFIG } from '../config/env';
 import { getRedis } from '../redis/kv';
-import { incRateLimitHit } from '../telemetry/metrics';
+import { incRateLimitHit, incRateLimitHitForTenant } from '../telemetry/metrics';
 import { getSetting } from '../services/settings';
 
 const redis = getRedis();
@@ -36,7 +36,17 @@ export function dynamicIpRateLimit(bucketName: string, defaultPoints: number, de
       const durationStr = await getSetting(tenantId, `rl.${bucketName}.durationSec`);
       const p = pointsStr ? Number(pointsStr) : defaultPoints;
       const d = durationStr ? Number(durationStr) : defaultDurationSeconds;
-      return ipRateLimit(Number.isFinite(p) && p > 0 ? p : defaultPoints, Number.isFinite(d) && d > 0 ? d : defaultDurationSeconds, bucketName)(req, res, next);
+      const limiter = ipRateLimit(Number.isFinite(p) && p > 0 ? p : defaultPoints, Number.isFinite(d) && d > 0 ? d : defaultDurationSeconds, bucketName);
+      // Wrap to record per-tenant hit metric
+      return limiter(req, {
+        ...res,
+        status: (code: number) => {
+          if (code === 429) {
+            try { incRateLimitHitForTenant(bucketName, tenantId); } catch {}
+          }
+          return (res as any).status(code);
+        },
+      } as any, next);
     } catch {
       return ipRateLimit(defaultPoints, defaultDurationSeconds, bucketName)(req, res, next);
     }

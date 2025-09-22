@@ -8,7 +8,14 @@ const slugToIdCache = new Map<string, string>();
 async function getTenantIdBySlug(slug: string): Promise<string> {
   if (slugToIdCache.has(slug)) return slugToIdCache.get(slug)!;
   const prisma = getPrisma();
-  const t = await prisma.tenant.findUnique({ where: { slug } });
+  let t = await prisma.tenant.findUnique({ where: { slug } });
+  if (!t && slug === 'default') {
+    try {
+      t = await prisma.tenant.create({ data: { name: 'Default', slug: 'default' } });
+    } catch {
+      t = await prisma.tenant.findUnique({ where: { slug } });
+    }
+  }
   if (!t) throw new Error('tenant_not_found');
   slugToIdCache.set(slug, t.id);
   return t.id;

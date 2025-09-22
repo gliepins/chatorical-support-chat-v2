@@ -34,4 +34,13 @@ export async function getCommaListSetting(tenantId: string, key: string): Promis
   return v.split(',').map(s => s.trim()).filter(Boolean);
 }
 
+export async function getBooleanSetting(tenantId: string, key: string, defaultValue = false): Promise<boolean> {
+  const v = await getSetting(tenantId, key);
+  if (typeof v !== 'string') return defaultValue;
+  const norm = v.trim().toLowerCase();
+  if (norm === 'true' || norm === '1' || norm === 'yes' || norm === 'on') return true;
+  if (norm === 'false' || norm === '0' || norm === 'no' || norm === 'off') return false;
+  return defaultValue;
+}
+
 

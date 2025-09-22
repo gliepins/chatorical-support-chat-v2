@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests (smoke subset)
+        run: |
+          npm run -s test:apikey
+          npm run -s test:admin-templates
+          npm run -s test:admin-settings
+          npm run -s test:webhook-metrics
+          npm run -s test:webhook-limits
+          npm run -s test:e2e-ws
+          npm run -s test:retention
+          npm run -s test:public-rename
+          npm run -s test:admin-audit
+          npm run -s test:public-start-flag
+          npm run -s test:public-v2-ws-token
+          npm run -s test:public-send
+
+      # Deployment step is environment-specific; placeholder for SSH/rsync or container push
+      - name: Migrate database (placeholder)
+        run: echo "Run prisma migrate on target before restart (placeholder)"
+
+      - name: Deploy (placeholder)
+        run: echo "Deploy step configured in environment (Ansible/SSH/K8s)"
+
+

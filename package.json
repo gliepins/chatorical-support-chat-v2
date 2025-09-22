@@ -22,9 +22,17 @@
     "test:template-preview": "node -r ts-node/register scripts/test_template_preview.ts",
     "test:e2e-telegram": "node -r ts-node/register scripts/test_e2e_telegram_inbound.ts",
     "test:e2e-ws": "node -r ts-node/register scripts/test_e2e_ws_broadcast.ts",
+    "test:e2e-ws-fanout": "node -r ts-node/register scripts/test_e2e_ws_fanout.ts",
     "test:i18n": "node -r ts-node/register scripts/test_i18n_public.ts",
     "test:webhook-metrics": "node -r ts-node/register scripts/test_webhook_metrics.ts",
+    "test:webhook-limits": "node -r ts-node/register scripts/test_webhook_tenant_limits.ts",
     "test:admin-settings": "node -r ts-node/register scripts/test_admin_settings.ts",
+    "test:public-rename": "node -r ts-node/register scripts/test_public_rename.ts",
+    "test:retention": "node -r ts-node/register scripts/test_retention.ts",
+    "test:admin-audit": "node -r ts-node/register scripts/test_admin_audit_export.ts",
+    "test:public-start-flag": "node -r ts-node/register scripts/test_public_start_flag.ts",
+    "test:public-v2-ws-token": "node -r ts-node/register scripts/test_public_v2_ws_token.ts",
+    "test:public-send": "node -r ts-node/register scripts/test_public_send_message.ts",
     "test:all": "npm run -s test:metrics && npm run -s test:ws-local && npm run -s test:auth-ip && npm run -s test:apikey && npm run -s test:telegram-retry && npm run -s test:admin-telegram && npm run -s test:public-cross-tenant && npm run -s test:outbox && npm run -s test:admin-templates && npm run -s test:template-preview && npm run -s test:e2e-telegram && npm run -s test:e2e-ws && npm run -s test:i18n"
   },
   "dependencies": {

@@ -33,5 +33,10 @@ function verifyConversationToken(token, ipHash) {
     if (!payload || typeof payload.sub !== 'string' || typeof payload.t !== 'string') {
         throw new Error('Invalid token payload');
     }
+    if (typeof payload.ip === 'string') {
+        if (!ipHash || payload.ip !== ipHash) {
+            throw new Error('IP mismatch');
+        }
+    }
     return { tenantId: payload.t, conversationId: payload.sub };
 }

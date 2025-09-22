@@ -29,9 +29,17 @@ export async function getTelegramConfigByWebhookSecret(webhookSecret: string): P
   return { tenantId: row.tenantId as string, config: cfg };
 }
 
+export async function getTelegramConfigByHeaderSecret(tenantId: string, headerSecret: string): Promise<{ tenantId: string; config: TelegramConfig } | null> {
+  const prisma = getPrisma();
+  const row = await (prisma as any).channel.findFirst({ where: { tenantId, type: 'telegram', headerSecret } });
+  if (!row) return null;
+  const cfg = decryptJsonEnvelope(row.encConfig) as TelegramConfig;
+  return { tenantId: row.tenantId as string, config: cfg };
+}
+
 export async function sendTelegramText(botToken: string, chatId: string | number, text: string): Promise<void> {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-  const body = { chat_id: chatId, text, disable_notification: true };
+  const body = { chat_id: chatId, text, disable_notification: true } as any;
   let attempts = 0;
   // up to 3 attempts with respect to retry_after
   while (attempts < 3) {
@@ -61,6 +69,59 @@ export async function sendTelegramText(botToken: string, chatId: string | number
       return;
     }
   }
+}
+
+export async function sendTelegramTextInThread(botToken: string, chatId: string | number, threadId: number | undefined, text: string): Promise<void> {
+  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  const body: any = { chat_id: chatId, text, disable_notification: true };
+  if (typeof threadId === 'number' && Number.isFinite(threadId)) body.message_thread_id = threadId;
+  let attempts = 0;
+  const fetchImpl = fetchFn || (async () => { throw new Error('fetch not available'); }) as any;
+  while (attempts < 3) {
+    attempts++;
+    try {
+      const res = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      if (res && typeof res.json === 'function') {
+        const data = await res.json();
+        if (data && data.ok === true) {
+          incTelegramSends(1);
+          return;
+        }
+        const retryAfter = Number(data?.parameters?.retry_after || 0);
+        if (retryAfter > 0 && attempts < 3) {
+          await new Promise(r => setTimeout(r, Math.min((retryAfter + 1) * 1000, 15000)));
+          continue;
+        }
+        incTelegramErrors(1);
+        return;
+      }
+      incTelegramErrors(1);
+      return;
+    } catch {
+      incTelegramErrors(1);
+      return;
+    }
+  }
+}
+
+export async function createTelegramForumTopic(botToken: string, chatId: string | number, name: string): Promise<number | undefined> {
+  const url = `https://api.telegram.org/bot${botToken}/createForumTopic`;
+  const body: any = { chat_id: chatId, name };
+  try {
+    const fetchImpl = fetchFn || (async () => { throw new Error('fetch not available'); }) as any;
+    const res = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (res && typeof res.json === 'function') {
+      const data: any = await res.json();
+      if (data && data.ok === true) {
+        // Telegram returns result.message_thread_id for created topic
+        const tid = Number(data?.result?.message_thread_id);
+        if (Number.isFinite(tid)) return tid;
+      }
+    }
+  } catch {
+    // ignore — fall back to group root
+  }
+  return undefined;
 }
 
 
