@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members   Member[]
+  conversations Conversation[]
+  channels  Channel[]
+}
+
+model Member {
+  id        String   @id @default(cuid())
+  tenantId  String
+  email     String
+  role      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id           String   @id @default(cuid())
+  tenantId     String
+  codename     String
+  customerName String?
+  aboutNote    String?  @db.Text
+  threadId     Int?
+  status       ConversationStatus @default(OPEN_UNCLAIMED)
+  lastCustomerAt DateTime @default(now())
+  lastAgentAt  DateTime @default(now())
+  locale       String   @default("default")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  auditLogs    AuditLog[]
+
+  @@index([tenantId, updatedAt])
+  @@index([tenantId, status])
+  @@index([tenantId, threadId])
+}
+
+enum ConversationStatus {
+  OPEN_UNCLAIMED
+  OPEN_ASSIGNED
+  AWAITING_CUSTOMER
+  CLOSED
+  BLOCKED
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String
+  direction      MessageDirection
+  text           String   @db.Text
+  createdAt      DateTime @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String
+  actor          String
+  action         String
+  meta           Json
+  createdAt      DateTime @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+}
+
+model MessageTemplateLocale {
+  id        String  @id @default(cuid())
+  tenantId  String
+  key       String
+  locale    String @default("default")
+  enabled   Boolean @default(true)
+  text      String  @db.Text
+  toCustomerWs        Boolean  @default(false)
+  toCustomerPersist   Boolean  @default(false)
+  toTelegram          Boolean  @default(false)
+  pinInTopic          Boolean  @default(false)
+  rateLimitPerConvSec Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, key, locale])
+  @@index([tenantId, locale, key])
+}
+
+model Channel {
+  id         String   @id @default(cuid())
+  tenantId   String
+  type       String   // e.g., 'telegram'
+  encConfig  String   // encrypted JSON (AES-GCM)
+  webhookSecret String @unique
+  headerSecret  String?
+  status     String   @default("active")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, type])
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  tenantId   String
+  name       String
+  hashedKey  String
+  scopes     String
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model Outbox {
+  id              String   @id @default(cuid())
+  tenantId        String
+  type            String   // e.g., 'telegram_send'
+  payload         Json
+  idempotencyKey  String?
+  status          OutboxStatus @default(PENDING)
+  attempts        Int      @default(0)
+  nextAttemptAt   DateTime @default(now())
+  lastError       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, nextAttemptAt])
+  @@unique([tenantId, idempotencyKey])
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId, key])
+}
+
+

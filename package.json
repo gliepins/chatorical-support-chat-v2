@@ -1,0 +1,56 @@
+{
+  "name": "support-chat-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon --watch src --ext ts,tsx,json --exec \"node -r ts-node/register src/index.ts\"",
+    "build": "tsc -p .",
+    "start": "node dist/index.js",
+    "test:metrics": "node -r ts-node/register scripts/test_metrics.ts",
+    "test:ws-local": "node -r ts-node/register scripts/test_ws_local.ts",
+    "test:auth-ip": "node -r ts-node/register scripts/test_auth_ip.ts",
+    "test:apikey": "node -r ts-node/register scripts/test_api_key.ts",
+    "test:tenant-apikey": "node -r ts-node/register scripts/test_tenantcontext_apikey.ts",
+    "test:repo-tenant": "node -r ts-node/register scripts/test_repo_tenant_enforcement.ts",
+    "test:telegram-retry": "node -r ts-node/register scripts/test_telegram_retry.ts",
+    "test:admin-telegram": "node -r ts-node/register scripts/test_admin_telegram_send.ts",
+    "test:public-cross-tenant": "node -r ts-node/register scripts/test_public_v1_cross_tenant.ts",
+    "test:outbox": "node -r ts-node/register scripts/test_outbox_worker.ts",
+    "test:admin-templates": "node -r ts-node/register scripts/test_admin_templates.ts",
+    "test:template-preview": "node -r ts-node/register scripts/test_template_preview.ts",
+    "test:e2e-telegram": "node -r ts-node/register scripts/test_e2e_telegram_inbound.ts",
+    "test:e2e-ws": "node -r ts-node/register scripts/test_e2e_ws_broadcast.ts",
+    "test:i18n": "node -r ts-node/register scripts/test_i18n_public.ts",
+    "test:webhook-metrics": "node -r ts-node/register scripts/test_webhook_metrics.ts",
+    "test:admin-settings": "node -r ts-node/register scripts/test_admin_settings.ts",
+    "test:all": "npm run -s test:metrics && npm run -s test:ws-local && npm run -s test:auth-ip && npm run -s test:apikey && npm run -s test:telegram-retry && npm run -s test:admin-telegram && npm run -s test:public-cross-tenant && npm run -s test:outbox && npm run -s test:admin-templates && npm run -s test:template-preview && npm run -s test:e2e-telegram && npm run -s test:e2e-ws && npm run -s test:i18n"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "ws": "^8.18.0",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "pino": "^9.10.0",
+    "pino-http": "^10.5.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "prisma": "^6.16.2",
+    "@types/express": "^5.0.3",
+    "@types/cors": "^2.8.19",
+    "@types/ws": "^8.18.1",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.5.2",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
+
+

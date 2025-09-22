@@ -1,0 +1,45 @@
+import fs from 'fs';
+import path from 'path';
+import dotenv from 'dotenv';
+
+// Load .env from project root (dev) then overlay system env file if present
+(() => {
+  try { dotenv.config({ path: path.join(process.cwd(), '.env') }); } catch {}
+  try {
+    const systemEnv = '/etc/support-chat-v2.env';
+    if (fs.existsSync(systemEnv)) {
+      dotenv.config({ path: systemEnv });
+    }
+  } catch {}
+})();
+
+export function readSecretFile(filePathEnvName: string, fallbackEnvName?: string): string | undefined {
+  const p = (process.env as any)[filePathEnvName];
+  if (p && typeof p === 'string') {
+    try { return fs.readFileSync(p, 'utf8').trim(); } catch {}
+  }
+  if (fallbackEnvName) {
+    const v = (process.env as any)[fallbackEnvName];
+    if (v && typeof v === 'string' && v.trim().length > 0) return v;
+  }
+  return undefined;
+}
+
+export const CONFIG = {
+  port: Number(process.env.PORT || 4012),
+  bindHost: String(process.env.BIND_HOST || '127.0.0.1'),
+  nodeEnv: String(process.env.NODE_ENV || 'development'),
+  publicOrigin: String(process.env.PUBLIC_ORIGIN || ''),
+  allowedOrigins: String(process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean),
+  redisUrl: String(process.env.REDIS_URL || 'redis://127.0.0.1:6379/3'),
+  redisKeyPrefix: String(process.env.REDIS_KEY_PREFIX || 'scv2:'),
+  featureRedisPubSub: String(process.env.FEATURE_REDIS_PUBSUB || 'true').toLowerCase() === 'true',
+  featureTenantEnforced: String(process.env.FEATURE_TENANT_CONTEXT_ENFORCED || 'false').toLowerCase() === 'true',
+  logPretty: String(process.env.LOG_PRETTY || 'true').toLowerCase() === 'true',
+  logLevel: String(process.env.LOG_LEVEL || 'info'),
+  s2sToken: readSecretFile('S2S_TOKEN_FILE', 'SERVICE_TOKEN'),
+  jwtSecret: readSecretFile('CONVERSATION_JWT_SECRET_FILE', 'CONVERSATION_JWT_SECRET'),
+  kmsMasterKey: readSecretFile('KMS_MASTER_KEY_FILE'),
+};
+
+
