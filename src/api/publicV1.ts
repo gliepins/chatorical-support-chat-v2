@@ -60,12 +60,13 @@ router.post('/v1/conversations/start', dynamicIpRateLimit('start', START_POINTS,
       }
     } catch {}
     const conv = await createConversation(tenantId, name, locale);
+    try { res.setHeader('x-tenant-resolved', tenantId); } catch {}
     // Ensure Telegram topic at start (v1 parity). Ignore errors to avoid blocking start.
     try { await ensureTopicForConversation(tenantId, conv.id); } catch {}
     try { await incrDailyCounter(tenantId, 'starts'); } catch {}
     const ipHash = hashIp((req.ip || '').toString());
     const token = signConversationToken(tenantId, conv.id, ipHash);
-    return res.json({ conversation_id: conv.id, token, codename: conv.codename });
+    return res.json({ conversation_id: conv.id, token, codename: conv.codename, tenant_id: tenantId });
   } catch (e: any) {
     return res.status(400).json({ error: { code: 'bad_request', message: e?.message || 'bad request' } });
   }
@@ -148,6 +149,7 @@ router.post('/v1/conversations/:id/messages', requireConversationAuth, async (re
       }
     } catch {}
     const msg = await addCustomerInboundMessage(tenantId, id, String(text || ''));
+    try { res.setHeader('x-tenant-resolved', tenantId); } catch {}
     // Record usage after successful persist
     try { await incrDailyMessages(tenantId, null); } catch {}
     // Bridge to Telegram topic if configured
