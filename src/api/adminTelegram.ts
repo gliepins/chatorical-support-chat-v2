@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireServiceOrApiKey } from '../middleware/serviceAuth';
+import { requireServiceOrApiKey, requireServiceAuth } from '../middleware/serviceAuth';
 import { getPrisma } from '../db/client';
 import { decryptJsonEnvelope } from '../services/crypto';
 import { sendTelegramText, sendTelegramTextInThread, upsertTelegramChannel, enqueueTelegramTextInThread } from '../channels/telegram/adapter';
@@ -80,6 +80,24 @@ router.post('/v1/admin/telegram/verify', requireServiceOrApiKey(['admin:read']),
     const cfg = decryptJsonEnvelope(ch.encConfig) as { botToken: string; supportGroupId?: string };
     const ok = Boolean(cfg && cfg.botToken && (cfg.botToken as any).length > 20);
     return res.json({ ok, hasSupportGroupId: Boolean(cfg.supportGroupId), hasHeaderSecret: Boolean(ch.headerSecret), webhookSecretSet: Boolean(ch.webhookSecret) });
+  } catch (e: any) {
+    return res.status(500).json({ error: { code: 'internal_error', message: e?.message } });
+  }
+});
+
+// DEBUG: service-token only. Returns telegram channel secrets for troubleshooting on stage.
+// POST /v1/admin/telegram/debug { tenantSlug }
+router.post('/v1/admin/telegram/debug', requireServiceAuth, async (req, res) => {
+  try {
+    const { tenantSlug } = (req.body || {}) as { tenantSlug?: string };
+    if (!tenantSlug) return res.status(400).json({ error: { code: 'missing_params' } });
+    const prisma = getPrisma();
+    const t = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+    if (!t) return res.status(404).json({ error: { code: 'tenant_not_found' } });
+    const ch = await (prisma as any).channel.findFirst({ where: { tenantId: t.id, type: 'telegram' }, orderBy: { updatedAt: 'desc' } });
+    if (!ch) return res.status(404).json({ error: { code: 'telegram_channel_not_found' } });
+    const cfg = decryptJsonEnvelope(ch.encConfig) as { botToken: string; supportGroupId?: string };
+    return res.json({ tenantId: t.id, webhookSecret: ch.webhookSecret, headerSecret: ch.headerSecret, supportGroupId: cfg.supportGroupId });
   } catch (e: any) {
     return res.status(500).json({ error: { code: 'internal_error', message: e?.message } });
   }
