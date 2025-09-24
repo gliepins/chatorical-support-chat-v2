@@ -207,7 +207,8 @@ app.get('/widget.js', (req, res) => {
         var startOpen = (function(){ try { var so = localStorage.getItem(LS_OPEN); if (so === '1') return true; if (so === '0') return false; } catch(_e) {} return !!opts.open; })();
         function begin(){
           var storedConv = null; var storedTok = null;
-          try { storedConv = localStorage.getItem(LS_CONV)||''; storedTok = localStorage.getItem(LS_TOKEN)||''; } catch(_e) {}
+          function ks(name){ try { return 'scv2_' + String(tenantSlug||'default') + '_' + String(name); } catch(_) { return 'scv2_' + String(name); } }
+          try { storedConv = localStorage.getItem(ks('conv'))||''; storedTok = localStorage.getItem(ks('token'))||''; } catch(_e) {}
           var startPromise;
           if (storedConv && storedTok) {
             startPromise = Promise.resolve({ token: storedTok, conversation_id: storedConv });
@@ -216,13 +217,13 @@ app.get('/widget.js', (req, res) => {
           }
           return startPromise.then(function(start){
             if (!start || !start.token || !start.conversation_id) throw new Error('start_failed');
-            try { localStorage.setItem(LS_CONV, start.conversation_id); localStorage.setItem(LS_TOKEN, start.token); } catch(_e) {}
+            try { localStorage.setItem(ks('conv'), start.conversation_id); localStorage.setItem(ks('token'), start.token); } catch(_e) {}
             return http('POST', '/v2/ws/token', null, { authorization: 'Bearer ' + start.token }).then(function(tok){ return { start: start, wsToken: tok && tok.token }; });
           }).catch(function(){
             // Fallback: force new conversation on failure
             return http('POST', '/v1/conversations/start', { name: name, locale: locale }).then(function(start){
               if (!start || !start.token || !start.conversation_id) throw new Error('start_failed');
-              try { localStorage.setItem(LS_CONV, start.conversation_id); localStorage.setItem(LS_TOKEN, start.token); } catch(_e) {}
+              try { localStorage.setItem(ks('conv'), start.conversation_id); localStorage.setItem(ks('token'), start.token); } catch(_e) {}
               return http('POST', '/v2/ws/token', null, { authorization: 'Bearer ' + start.token }).then(function(tok){ return { start: start, wsToken: tok && tok.token }; });
             });
           });
@@ -233,7 +234,7 @@ app.get('/widget.js', (req, res) => {
           function refreshWsToken(){ return http('POST', '/v2/ws/token', null, { authorization: 'Bearer ' + all.start.token }).then(function(tok){ return tok && tok.token; }).catch(function(){
             // Fallback: token likely stale; start a fresh conversation and update storage
             return http('POST', '/v1/conversations/start', { name: name, locale: locale }).then(function(ns){
-              try { localStorage.setItem(LS_CONV, ns.conversation_id); localStorage.setItem(LS_TOKEN, ns.token); } catch(_e) {}
+              try { localStorage.setItem(ks('conv'), ns.conversation_id); localStorage.setItem(ks('token'), ns.token); } catch(_e) {}
               all.start = ns;
               return http('POST', '/v2/ws/token', null, { authorization: 'Bearer ' + ns.token }).then(function(tok2){ return tok2 && tok2.token; });
             });
