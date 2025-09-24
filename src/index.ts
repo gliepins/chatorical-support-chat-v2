@@ -163,7 +163,9 @@ app.get('/widget.js', (req, res) => {
     var LS_CONV = 'scv2_conv';
     var LS_TOKEN = 'scv2_token';
     function http(method, path, body, headers){
-      return fetch(API_BASE + path, { method: method, headers: Object.assign({ 'content-type': 'application/json', 'x-tenant-id': TENANT_SLUG }, headers||{}), body: body ? JSON.stringify(body) : undefined }).then(function(r){
+      var p = path;
+      try { if (TENANT_SLUG && TENANT_SLUG !== 'default') { p = path + (path.indexOf('?')===-1?'?':'&') + 't=' + encodeURIComponent(TENANT_SLUG); } } catch {}
+      return fetch(API_BASE + p, { method: method, headers: Object.assign({ 'content-type': 'application/json', 'x-tenant-id': TENANT_SLUG }, headers||{}), body: body ? JSON.stringify(body) : undefined }).then(function(r){
         return r.json().catch(function(){ return {}; }).then(function(b){
           if (!r.ok) {
             var err = new Error((b && b.error && (b.error.message||b.error.code)) || 'error');

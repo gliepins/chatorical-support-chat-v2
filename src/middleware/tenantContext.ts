@@ -27,6 +27,14 @@ export async function resolveTenantContextAsync(req: Request): Promise<TenantCon
   if (apiKey && apiKey.tenantId) {
     return { tenantId: apiKey.tenantId };
   }
+  // Then allow explicit query param override (?t=tenant-slug) for environments where headers are stripped
+  try {
+    const q = (req.query && (req.query as any).t) ? String((req.query as any).t) : '';
+    if (q && q.trim().length > 0) {
+      const tenantId = await getTenantIdBySlug(q.trim());
+      return { tenantId };
+    }
+  } catch {}
   const header = req.header('x-tenant-id');
   const slug = (header && header.trim()) || 'default';
   const tenantId = await getTenantIdBySlug(slug);
