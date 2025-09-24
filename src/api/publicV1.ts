@@ -74,7 +74,9 @@ router.post('/v1/conversations/start', dynamicIpRateLimit('start', START_POINTS,
 
 router.get('/v1/conversations/:id/messages', async (req, res) => {
   try {
-    const tenantId: string = (req as any).tenant?.tenantId || 'default';
+    // Prefer tenant from authenticated conversation token if available
+    const convAuth = (req as any).conversation as { tenantId?: string } | undefined;
+    const tenantId: string = (convAuth?.tenantId as string) || (req as any).tenant?.tenantId || 'default';
     const conv = await getConversationById(tenantId, req.params.id);
     if (!conv) return res.status(404).json({ error: { code: 'not_found' } });
     const msgs = await listMessages(tenantId, req.params.id);
@@ -89,6 +91,7 @@ router.get('/v1/conversations/:id/messages', async (req, res) => {
         }
       }
     } catch {}
+    try { res.setHeader('x-tenant-resolved', tenantId); } catch {}
     return res.json({ status: 'OPEN_UNCLAIMED', messages: filtered });
   } catch (e: any) {
     return res.status(400).json({ error: { code: 'bad_request' } });
@@ -130,7 +133,9 @@ router.patch('/v1/conversations/:id/name', dynamicIpRateLimit('rename', 3, 24 * 
 // POST /v1/conversations/:id/messages — customer sends a message (JWT required)
 router.post('/v1/conversations/:id/messages', requireConversationAuth, async (req, res) => {
   try {
-    const tenantId: string = (req as any).tenant?.tenantId || 'default';
+    // Prefer tenant from conversation token to avoid header/proxy ambiguity
+    const convAuth = (req as any).conversation as { tenantId?: string } | undefined;
+    const tenantId: string = (convAuth?.tenantId as string) || (req as any).tenant?.tenantId || 'default';
     const id = req.params.id;
     const { text } = (req.body || {}) as { text?: string };
     // Enforce plan-based daily message limit (tenant-wide)
