@@ -70,6 +70,14 @@ Last updated: 2025-09-24
 - Ops: finalize real bot token/group id and permissions on stage
  - Browser E2E (Puppeteer) — install Chrome headless deps on server
 
+### Recent
+
+- Strict tenant enforcement enabled (no default fallback; `FEATURE_TENANT_CONTEXT_ENFORCED=true`).
+- Widget updated to send `x-tenant-id` and `?t=<slug>`; localStorage keys namespaced per tenant.
+- Tenant migration: `default` → `a-tenant` (baseline); `default` quarantined (`flags.public.disableStart=true`, channel disabled).
+- `b-tenant` fully validated end‑to‑end (widget↔Telegram, correct group/thread).
+- `c-tenant` created; allowedOrigins set; Telegram channel configured and webhook set.
+
 ### Next steps (short-term)
 
 - Idempotent enqueue for customer→Telegram using `conv_msg_out_<messageId>`.
@@ -115,6 +123,8 @@ Last updated: 2025-09-24
  - 2025-09-24: Redis pub/sub separated (publisher/subscriber); live inbound duplicates fixed via client dedupe
  - 2025-09-24: Webhook persists messages as OUTBOUND (customer UI) and includes createdAt in WS payloads
  - 2025-09-24: Added `/v1/conversations/:id/messages?since=...` for reconnect backfill
+ - 2025-09-24: Enforced explicit tenant (no default fallback) under feature flag; widget sends header+query; per-tenant storage
+ - 2025-09-24: Migrated `default` → `a-tenant`, validated `b-tenant`, created `c-tenant`
 
 ### How to update this document
 

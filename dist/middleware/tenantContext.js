@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveTenantContextAsync = resolveTenantContextAsync;
 exports.tenantContext = tenantContext;
 const client_1 = require("../db/client");
+const env_1 = require("../config/env");
 const slugToIdCache = new Map();
 async function getTenantIdBySlug(slug) {
     if (slugToIdCache.has(slug))
@@ -38,12 +39,14 @@ async function resolveTenantContextAsync(req) {
     }
     catch { }
     const header = req.header('x-tenant-id');
-    const slug = (header && header.trim()) || 'default';
+    const slug = (header && header.trim()) || (env_1.CONFIG.featureTenantEnforced ? '' : 'default');
+    if (!slug)
+        throw new Error('tenant_missing');
     const tenantId = await getTenantIdBySlug(slug);
     return { tenantId };
 }
 function tenantContext(req, res, next) {
     resolveTenantContextAsync(req)
         .then((tc) => { req.tenant = tc; next(); })
-        .catch(() => res.status(400).json({ error: 'tenant_not_found' }));
+        .catch((_e) => res.status(400).json({ error: { code: 'tenant_not_found' } }));
 }
