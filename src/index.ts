@@ -163,7 +163,7 @@ app.get('/widget.js', (req, res) => {
     var LS_CONV = 'scv2_conv';
     var LS_TOKEN = 'scv2_token';
     function http(method, path, body, headers){
-      return fetch(API_BASE + path, { method: method, headers: Object.assign({ 'content-type': 'application/json' }, headers||{}), body: body ? JSON.stringify(body) : undefined }).then(function(r){
+      return fetch(API_BASE + path, { method: method, headers: Object.assign({ 'content-type': 'application/json', 'x-tenant-id': TENANT_SLUG }, headers||{}), body: body ? JSON.stringify(body) : undefined }).then(function(r){
         return r.json().catch(function(){ return {}; }).then(function(b){
           if (!r.ok) {
             var err = new Error((b && b.error && (b.error.message||b.error.code)) || 'error');
@@ -182,6 +182,7 @@ app.get('/widget.js', (req, res) => {
       init: function init(opts){
         opts = opts || {};
         var tenantSlug = opts.tenantSlug || 'default';
+        TENANT_SLUG = tenantSlug;
         var locale = (opts.locale || 'default').toLowerCase();
         var name = opts.name || undefined;
         var theme = opts.theme || {};
