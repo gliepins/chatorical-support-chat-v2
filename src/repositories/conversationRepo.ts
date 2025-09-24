@@ -24,6 +24,12 @@ export async function getConversationById(tenantId: string, conversationId: stri
   return prisma.conversation.findFirst({ where: { tenantId, id: conversationId } });
 }
 
+export async function countActiveConversations(tenantId: string): Promise<number> {
+  const prisma = getPrisma();
+  // Active = not CLOSED and not BLOCKED
+  return prisma.conversation.count({ where: { tenantId, status: { notIn: ['CLOSED' as any, 'BLOCKED' as any] } as any } });
+}
+
 export async function findConversationByThreadId(tenantId: string, threadId: number) {
   const prisma = getPrisma();
   return prisma.conversation.findFirst({ where: { tenantId, threadId } });
@@ -58,7 +64,8 @@ export async function addAgentInboundMessage(tenantId: string, conversationId: s
   const trimmed = text.trim();
   if (!trimmed) return null as any;
   const msg = await prisma.message.create({
-    data: { tenantId, conversationId, direction: 'INBOUND' as any, text: trimmed },
+    // "Agent inbound" to the system is "OUTBOUND" to the customer UI
+    data: { tenantId, conversationId, direction: 'OUTBOUND' as any, text: trimmed },
   });
   // Agent responded (inbound to customer), still update lastAgentAt
   await prisma.conversation.update({ where: { id: conversationId }, data: { lastAgentAt: new Date() } });

@@ -4,6 +4,7 @@ exports.addClientToConversation = addClientToConversation;
 exports.removeClientFromConversation = removeClientFromConversation;
 exports.broadcastToConversation = broadcastToConversation;
 const metrics_1 = require("../telemetry/metrics");
+const client_1 = require("../db/client");
 const conversationIdToClients = new Map();
 function addClientToConversation(conversationId, ws) {
     let set = conversationIdToClients.get(conversationId);
@@ -33,4 +34,13 @@ function broadcastToConversation(conversationId, payload) {
         }
         catch { }
     }
+    // Lightweight tenant counter (best effort)
+    try {
+        const prisma = (0, client_1.getPrisma)();
+        prisma.conversation.findUnique({ where: { id: conversationId } }).then((conv) => {
+            if (conv && conv.tenantId)
+                (0, metrics_1.incWsOutboundForTenant)(conv.tenantId, 1);
+        }).catch(() => { });
+    }
+    catch { }
 }

@@ -57,7 +57,7 @@ Deliverables:
 - Outbox table persists side‑effects (Telegram send, WS broadcast) and workers retry with jitter and idempotency keys.
 
 Deliverables:
-- Worker process (BullMQ or lightweight cron) + metrics.
+- Worker process (lightweight loop) + metrics; systemd unit `support-chat-v2-worker`.
 
 ## Milestone 6 — Templates & Translations per Tenant
 
@@ -74,7 +74,7 @@ Deliverables:
 - Theming tokens and A11y polish; localized UI fetch.
 
 Deliverables:
-- Versioned widget build; CSP guidance.
+- Versioned widget script via `/widget.js?v=...` with cache headers; CSP guidance.
 
 ## Milestone 8 — Billing & Usage
 
@@ -98,13 +98,13 @@ Deliverables:
 3) Enable TenantContext; move controllers gradually.
 4) Switch Telegram to adapter; configure per‑tenant channels; rotate secrets.
 5) Enable API keys; deprecate raw service token over time.
-6) Release widget v2 with tenant bootstrap.
+6) Release widget v2 with tenant bootstrap and versioned snippet generator (`scripts/releaseWidget.js`).
 7) Turn on billing gates and usage reporting.
 
 ## Testing Strategy
 
 - Unit tests: auth, token binding, repository scoping, template fallback.
-- Integration: webhook handling, WS auth/fan‑out, action execution.
+- Integration: webhook handling (idempotency, header secret), WS auth/fan‑out, action execution.
 - Cross‑tenant leak tests: attempt reads/writes across tenants → must fail.
 - Load tests: WS broadcast and channel sends under burst.
 
@@ -116,12 +116,54 @@ Deliverables:
 - M4: Telegram isolated per tenant; inbound routed; retries work.
 - M5: Outbox prevents message loss; retries succeed across restarts.
 - M6: Templates & translations editable per tenant; fallbacks verified.
-- M7: Widget connects with short‑lived tokens; no token persisted insecurely.
+- M7: Widget connects with short‑lived tokens; no token persisted insecurely; client dedupe; reconnect backfill.
 - M8: Billing webhooks recorded; over‑limit behavior correct.
 - M9: Dashboards show per‑tenant metrics; audits exportable.
 
 ---
-Last updated: 2025-09-22
+Last updated: 2025-09-24
 
+
+## Immediate Next Steps (2025-09-24)
+
+- Idempotent customer→Telegram enqueue:
+  - Use idempotency key `conv_msg_out_<messageId>` when enqueuing to Outbox to prevent duplicate sends across retries/restarts.
+- Admin outbox (read‑only) list endpoint:
+  - `GET /v1/admin/outbox?tenantSlug=&status=&limit=&includePayload=0|1`
+  - Requires `admin:read` (and tenant match). Payload text redacted by default; `includePayload=1` requires `admin:write`.
+- Multi‑tenant validation (Tenant B) — manual on staging:
+  - Create tenant B; configure Telegram channel (bot token, group id, webhook/header secrets).
+  - Set `allowedOrigins` for tenant B; embed widget with `tenantSlug` + origin.
+  - Verify isolation: widget A ≠ widget B; Telegram round‑trip per tenant only.
+- Worker unit hardening (ops):
+  - Non‑root user, env file in `/etc/chatorical`, `Restart=on-failure`, graceful stop.
+- Deferred (later phase):
+  - Prometheus/queue metrics, browser E2E with headless browsers, extended widget polish.
+
+## Appendix — Ops Commands
+
+Widget release/versioning:
+
+```
+WIDGET_ORIGIN=https://stage.chatorical.com npm run -s release:widget
+sudo -n sed -i -E "s#/widget\.js\?v[^"]*#/widget.js?v=YYYYMMDDHHMM-sha#g" /var/www/stage/index.html
+```
+
+Services (API + Worker):
+
+```
+sudo systemctl enable --now support-chat-v2 support-chat-v2-worker
+sudo systemctl restart support-chat-v2 support-chat-v2-worker
+systemctl status --no-pager support-chat-v2 support-chat-v2-worker | cat
+journalctl -u support-chat-v2 -n 100 --no-pager | cat
+journalctl -u support-chat-v2-worker -n 100 --no-pager | cat
+```
+
+Latency tuning for outbox:
+
+```
+echo 'OUTBOX_IDLE_MS=75' | sudo tee -a /etc/chatorical/support-chat-v2.env >/dev/null
+sudo systemctl restart support-chat-v2-worker
+```
 
 

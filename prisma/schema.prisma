@@ -17,6 +17,9 @@ model Tenant {
   members   Member[]
   conversations Conversation[]
   channels  Channel[]
+  apiKeys   ApiKey[]
+  outboxes  Outbox[]
+  settings  Setting[]
 }
 
 model Member {
@@ -181,6 +184,69 @@ model Setting {
 
   @@unique([tenantId, key])
   @@index([tenantId, key])
+}
+
+
+// --- Billing (Plans/Prices/Features) ---
+
+enum BillingInterval {
+  month
+  year
+}
+
+model Plan {
+  id          String        @id @default(cuid())
+  key         String        @unique
+  name        String
+  description String?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  prices      PlanPrice[]
+  features    PlanFeature[]
+}
+
+model PlanPrice {
+  id               String          @id @default(cuid())
+  planId           String
+  currency         String          @default("eur")
+  unitAmountCents  Int
+  interval         BillingInterval
+  stripePriceId    String?
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  plan             Plan            @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, currency, interval, isActive])
+}
+
+model PlanFeature {
+  id        String   @id @default(cuid())
+  planId    String
+  key       String
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, key])
+}
+
+model UsageEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  type       String
+  subjectId  String?
+  count      Int      @default(0)
+  occurredAt DateTime @default(now())
+
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, type, occurredAt])
 }
 
 

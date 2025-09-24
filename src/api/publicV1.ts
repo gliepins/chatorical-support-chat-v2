@@ -7,10 +7,14 @@ import { addCustomerInboundMessage } from '../repositories/conversationRepo';
 import { setConversationThreadId } from '../repositories/conversationRepo';
 import { getPrisma } from '../db/client';
 import { decryptJsonEnvelope } from '../services/crypto';
-import { sendTelegramTextInThread, createTelegramForumTopic } from '../channels/telegram/adapter';
+import { sendTelegramTextInThread, createTelegramForumTopic, enqueueTelegramTextInThread } from '../channels/telegram/adapter';
 import { getSetting } from '../services/settings';
-import { createConversation, listMessages, getConversationById } from '../repositories/conversationRepo';
+import { createConversation, listMessages, getConversationById, countActiveConversations } from '../repositories/conversationRepo';
 import { getBooleanSetting } from '../services/settings';
+import { ensureTopicForConversation } from '../channels/telegram/topic';
+import { getTenantPlanKey, getPlanFeatures, featureNumberOrUnlimited, featureBoolean } from '../services/plan';
+import { getDailyMessages, incrDailyMessages, getDailyCounter, incrDailyCounter } from '../services/usage';
+import { incOverLimitForTenant } from '../telemetry/metrics';
 
 const router = Router();
 
@@ -21,11 +25,44 @@ router.post('/v1/conversations/start', dynamicIpRateLimit('start', START_POINTS,
   try {
     const { name, locale } = (req.body || {}) as { name?: string; locale?: string };
     const tenantId: string = (req as any).tenant?.tenantId || 'default';
+    // Plan-based limit: starts per day
+    try {
+      const planKey = await getTenantPlanKey(tenantId);
+      if (planKey) {
+        const features = await getPlanFeatures(planKey);
+        const startLimit = featureNumberOrUnlimited(features, 'limits.starts_per_day');
+        if (startLimit !== 'unlimited' && typeof startLimit === 'number' && startLimit >= 0) {
+          const used = await getDailyCounter(tenantId, 'starts');
+          if (used >= startLimit) {
+            try { incOverLimitForTenant('starts_per_day', tenantId); } catch {}
+            return res.status(429).json({ error: { code: 'over_limit', message: 'daily_starts_limit_reached' } });
+          }
+        }
+      }
+    } catch {}
     try {
       const disabled = await getBooleanSetting(tenantId, 'flags.public.disableStart', false);
       if (disabled) return res.status(403).json({ error: { code: 'disabled', message: 'start_disabled' } });
     } catch {}
+    // Active conversations cap
+    try {
+      const planKey = await getTenantPlanKey(tenantId);
+      if (planKey) {
+        const features = await getPlanFeatures(planKey);
+        const activeCap = featureNumberOrUnlimited(features, 'limits.active_conversations');
+        if (activeCap !== 'unlimited' && typeof activeCap === 'number' && activeCap >= 0) {
+          const activeNow = await countActiveConversations(tenantId);
+          if (activeNow >= activeCap) {
+            try { incOverLimitForTenant('active_conversations', tenantId); } catch {}
+            return res.status(429).json({ error: { code: 'over_limit', message: 'active_conversations_cap_reached' } });
+          }
+        }
+      }
+    } catch {}
     const conv = await createConversation(tenantId, name, locale);
+    // Ensure Telegram topic at start (v1 parity). Ignore errors to avoid blocking start.
+    try { await ensureTopicForConversation(tenantId, conv.id); } catch {}
+    try { await incrDailyCounter(tenantId, 'starts'); } catch {}
     const ipHash = hashIp((req.ip || '').toString());
     const token = signConversationToken(tenantId, conv.id, ipHash);
     return res.json({ conversation_id: conv.id, token, codename: conv.codename });
@@ -40,7 +77,18 @@ router.get('/v1/conversations/:id/messages', async (req, res) => {
     const conv = await getConversationById(tenantId, req.params.id);
     if (!conv) return res.status(404).json({ error: { code: 'not_found' } });
     const msgs = await listMessages(tenantId, req.params.id);
-    return res.json({ status: 'OPEN_UNCLAIMED', messages: msgs });
+    // Optional since-cursor (ISO string or ms) to reduce reload flashes
+    let filtered = msgs;
+    try {
+      const sinceRaw = (req.query && (req.query as any).since) ? String((req.query as any).since) : '';
+      if (sinceRaw) {
+        const sinceMs = isFinite(Number(sinceRaw)) ? Number(sinceRaw) : Date.parse(sinceRaw);
+        if (isFinite(sinceMs)) {
+          filtered = msgs.filter((m: any) => new Date(m.createdAt).getTime() > sinceMs);
+        }
+      }
+    } catch {}
+    return res.json({ status: 'OPEN_UNCLAIMED', messages: filtered });
   } catch (e: any) {
     return res.status(400).json({ error: { code: 'bad_request' } });
   }
@@ -55,7 +103,23 @@ router.patch('/v1/conversations/:id/name', dynamicIpRateLimit('rename', 3, 24 * 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return res.status(400).json({ error: { code: 'bad_request', message: 'name_required' } });
     }
+    // Plan-based limit: renames per day
+    try {
+      const planKey = await getTenantPlanKey(tenantId);
+      if (planKey) {
+        const features = await getPlanFeatures(planKey);
+        const renameLimit = featureNumberOrUnlimited(features, 'limits.renames_per_day');
+        if (renameLimit !== 'unlimited' && typeof renameLimit === 'number' && renameLimit >= 0) {
+          const used = await getDailyCounter(tenantId, 'renames');
+          if (used >= renameLimit) {
+            try { incOverLimitForTenant('renames_per_day', tenantId); } catch {}
+            return res.status(429).json({ error: { code: 'over_limit', message: 'daily_renames_limit_reached' } });
+          }
+        }
+      }
+    } catch {}
     const updated = await updateConversationName(tenantId, id, name.trim());
+    try { await incrDailyCounter(tenantId, 'renames'); } catch {}
     return res.json({ ok: true, conversation: { id: updated.id, name: updated.customerName } });
   } catch (e: any) {
     return res.status(400).json({ error: { code: 'bad_request', message: e?.message } });
@@ -68,12 +132,41 @@ router.post('/v1/conversations/:id/messages', requireConversationAuth, async (re
     const tenantId: string = (req as any).tenant?.tenantId || 'default';
     const id = req.params.id;
     const { text } = (req.body || {}) as { text?: string };
+    // Enforce plan-based daily message limit (tenant-wide)
+    try {
+      const planKey = await getTenantPlanKey(tenantId);
+      if (planKey) {
+        const features = await getPlanFeatures(planKey);
+        const dailyLimit = featureNumberOrUnlimited(features, 'limits.messages_per_day');
+        if (dailyLimit !== 'unlimited' && typeof dailyLimit === 'number' && dailyLimit >= 0) {
+          const used = await getDailyMessages(tenantId, null);
+          if (used >= dailyLimit) {
+            try { incOverLimitForTenant('daily_messages', tenantId); } catch {}
+            return res.status(429).json({ error: { code: 'over_limit', message: 'daily_messages_limit_reached' } });
+          }
+        }
+      }
+    } catch {}
     const msg = await addCustomerInboundMessage(tenantId, id, String(text || ''));
+    // Record usage after successful persist
+    try { await incrDailyMessages(tenantId, null); } catch {}
     // Bridge to Telegram topic if configured
     try {
+      // Check if telegram channel is allowed for plan
+      let allowTelegram = true;
+      try {
+        const planKey = await getTenantPlanKey(tenantId);
+        if (planKey) {
+          const features = await getPlanFeatures(planKey);
+          allowTelegram = featureBoolean(features, 'channels.telegram', true);
+        }
+      } catch {}
+      if (!allowTelegram) {
+        return res.json({ ok: true, message: { createdAt: msg.createdAt, direction: msg.direction, text: msg.text } });
+      }
       const prisma = getPrisma();
       // Find telegram channel for tenant
-      const ch = await (prisma as any).channel.findFirst({ where: { tenantId, type: 'telegram' } });
+      const ch = await (prisma as any).channel.findFirst({ where: { tenantId, type: 'telegram' }, orderBy: { updatedAt: 'desc' } });
       if (ch) {
         const cfg = decryptJsonEnvelope(ch.encConfig) as { botToken: string; supportGroupId?: string };
         const conv = await getConversationById(tenantId, id);
@@ -101,7 +194,9 @@ router.post('/v1/conversations/:id/messages', requireConversationAuth, async (re
               } catch {}
             }
           }
-          await sendTelegramTextInThread(cfg.botToken, cfg.supportGroupId as any, maybeThreadId, String(text || ''));
+          // Enqueue for durable delivery (outbox worker) with idempotency key per customer message
+          const idemKey = `conv_msg_out_${(msg as any)?.id || 'unknown'}`;
+          try { await enqueueTelegramTextInThread(tenantId, cfg.supportGroupId as any, Number(maybeThreadId), String(text || ''), idemKey); } catch { await sendTelegramTextInThread(cfg.botToken, cfg.supportGroupId as any, maybeThreadId, String(text || '')); }
           // Persist mapping if we used a default topic
           if ((conv as any) && !(conv as any).threadId && typeof maybeThreadId === 'number') {
             try { await setConversationThreadId(tenantId, (conv as any).id, maybeThreadId); } catch {}

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getTelegramConfigByWebhookSecret } from './adapter';
 import { getPrisma } from '../../db/client';
 import { logger } from '../../telemetry/logger';
-import { incTelegramWebhookOk, incTelegramWebhookUnauthorized, incTelegramWebhookIdempotentSkipped, incTelegramWebhookParseErrors } from '../../telemetry/metrics';
+import { incTelegramWebhookOk, incTelegramWebhookUnauthorized, incTelegramWebhookIdempotentSkipped, incTelegramWebhookParseErrors, recordTelegramWebhookLatency } from '../../telemetry/metrics';
 import { findConversationByThreadId, createConversationWithThread, addAgentInboundMessage, findOrCreateRootConversation } from '../../repositories/conversationRepo';
 import { publishToConversation } from '../../ws/redisHub';
 import { getRedis } from '../../redis/kv';
@@ -14,6 +14,7 @@ import { ipRateLimit } from '../../middleware/rateLimit';
 export function telegramRouter(): Router {
   const router = Router();
   router.post('/v1/telegram/webhook/:secret', async (req, res) => {
+    const t0 = Date.now();
     const secret = (req.params as any).secret as string;
     try {
       let row = await runWithSpan('telegram.webhook.lookup', () => getTelegramConfigByWebhookSecret(secret), { secret_present: Boolean(secret) });
@@ -92,21 +93,27 @@ export function telegramRouter(): Router {
               return c;
             }, { thread_id: threadId });
             if (conv) {
-              try { const created = await runWithSpan('telegram.persistMessage', () => addAgentInboundMessage(tenantId, conv.id, text), { conv_id: conv.id }); try { await publishToConversation(conv.id, { direction: 'INBOUND', text: created?.text }); } catch {} } catch (e) { try { logger.warn({ err: e }, 'persist topic msg failed'); } catch {} }
+              try {
+                const created = await runWithSpan('telegram.persistMessage', () => addAgentInboundMessage(tenantId, conv.id, text), { conv_id: conv.id });
+                try { await publishToConversation(conv.id, { direction: 'OUTBOUND', text: created?.text, createdAt: created?.createdAt }); } catch {}
+              } catch (e) { try { logger.warn({ err: e }, 'persist topic msg failed'); } catch {} }
             }
           } else {
             const conv = await runWithSpan('telegram.ensureRoot', () => findOrCreateRootConversation(tenantId, msg.chat.title));
             if (conv) {
-              try { const created = await runWithSpan('telegram.persistMessage', () => addAgentInboundMessage(tenantId, conv.id, text), { conv_id: conv.id }); try { await publishToConversation(conv.id, { direction: 'INBOUND', text: created?.text }); } catch {} } catch (e) { try { logger.warn({ err: e }, 'persist root msg failed'); } catch {} }
+              try {
+                const created = await runWithSpan('telegram.persistMessage', () => addAgentInboundMessage(tenantId, conv.id, text), { conv_id: conv.id });
+                try { await publishToConversation(conv.id, { direction: 'OUTBOUND', text: created?.text, createdAt: created?.createdAt }); } catch {}
+              } catch (e) { try { logger.warn({ err: e }, 'persist root msg failed'); } catch {} }
             }
           }
         }
       }
-      try { incTelegramWebhookOk(1); } catch {}
+      try { incTelegramWebhookOk(1); recordTelegramWebhookLatency(Date.now() - t0); } catch {}
       return res.json({ ok: true });
     } catch (e) {
       // Maintain v1 behavior: return ok even on parse errors
-      try { incTelegramWebhookParseErrors(1); } catch {}
+      try { incTelegramWebhookParseErrors(1); recordTelegramWebhookLatency(Date.now() - t0); } catch {}
       return res.json({ ok: true });
     }
   });

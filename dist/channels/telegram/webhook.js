@@ -16,6 +16,7 @@ const rateLimit_1 = require("../../middleware/rateLimit");
 function telegramRouter() {
     const router = (0, express_1.Router)();
     router.post('/v1/telegram/webhook/:secret', async (req, res) => {
+        const t0 = Date.now();
         const secret = req.params.secret;
         try {
             let row = await (0, tracing_1.runWithSpan)('telegram.webhook.lookup', () => (0, adapter_1.getTelegramConfigByWebhookSecret)(secret), { secret_present: Boolean(secret) });
@@ -129,7 +130,7 @@ function telegramRouter() {
                             try {
                                 const created = await (0, tracing_1.runWithSpan)('telegram.persistMessage', () => (0, conversationRepo_1.addAgentInboundMessage)(tenantId, conv.id, text), { conv_id: conv.id });
                                 try {
-                                    await (0, redisHub_1.publishToConversation)(conv.id, { direction: 'INBOUND', text: created?.text });
+                                    await (0, redisHub_1.publishToConversation)(conv.id, { direction: 'OUTBOUND', text: created?.text, createdAt: created?.createdAt });
                                 }
                                 catch { }
                             }
@@ -147,7 +148,7 @@ function telegramRouter() {
                             try {
                                 const created = await (0, tracing_1.runWithSpan)('telegram.persistMessage', () => (0, conversationRepo_1.addAgentInboundMessage)(tenantId, conv.id, text), { conv_id: conv.id });
                                 try {
-                                    await (0, redisHub_1.publishToConversation)(conv.id, { direction: 'INBOUND', text: created?.text });
+                                    await (0, redisHub_1.publishToConversation)(conv.id, { direction: 'OUTBOUND', text: created?.text, createdAt: created?.createdAt });
                                 }
                                 catch { }
                             }
@@ -163,6 +164,7 @@ function telegramRouter() {
             }
             try {
                 (0, metrics_1.incTelegramWebhookOk)(1);
+                (0, metrics_1.recordTelegramWebhookLatency)(Date.now() - t0);
             }
             catch { }
             return res.json({ ok: true });
@@ -171,6 +173,7 @@ function telegramRouter() {
             // Maintain v1 behavior: return ok even on parse errors
             try {
                 (0, metrics_1.incTelegramWebhookParseErrors)(1);
+                (0, metrics_1.recordTelegramWebhookLatency)(Date.now() - t0);
             }
             catch { }
             return res.json({ ok: true });

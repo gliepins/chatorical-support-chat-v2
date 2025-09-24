@@ -17,8 +17,10 @@ export function startRedisHub(): void {
   if (started) return;
   started = true;
   try {
-    publisher = getRedis();
-    subscriber = getRedis();
+    // Use separate Redis connections for pub and sub. A subscriber connection
+    // cannot be used for publish commands.
+    publisher = new Redis(CONFIG.redisUrl);
+    subscriber = new Redis(CONFIG.redisUrl);
     const pattern = `${CONFIG.redisKeyPrefix}ws:conv:*`;
     subscriber.on('end', () => { try { logger.warn({ event: 'redis_subscriber_end' }); } catch {} });
     subscriber.on('error', (e) => { try { logger.error({ event: 'redis_subscriber_error', err: e }); } catch {} });

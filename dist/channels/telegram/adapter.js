@@ -5,11 +5,15 @@ exports.getTelegramConfigByWebhookSecret = getTelegramConfigByWebhookSecret;
 exports.getTelegramConfigByHeaderSecret = getTelegramConfigByHeaderSecret;
 exports.sendTelegramText = sendTelegramText;
 exports.sendTelegramTextInThread = sendTelegramTextInThread;
+exports.enqueueTelegramText = enqueueTelegramText;
+exports.enqueueTelegramTextInThread = enqueueTelegramTextInThread;
 exports.createTelegramForumTopic = createTelegramForumTopic;
 const client_1 = require("../../db/client");
 const crypto_1 = require("../../services/crypto");
 // Use global fetch in Node 18+; fallback to dynamic import if needed
 const fetchFn = globalThis.fetch ? globalThis.fetch.bind(globalThis) : undefined;
+const logger_1 = require("../../telemetry/logger");
+const outbox_1 = require("../../services/outbox");
 const metrics_1 = require("../../telemetry/metrics");
 async function upsertTelegramChannel(tenantId, config, webhookSecret) {
     const prisma = (0, client_1.getPrisma)();
@@ -51,8 +55,16 @@ async function sendTelegramText(botToken, chatId, text) {
                 const data = await res.json();
                 if (data && data.ok === true) {
                     (0, metrics_1.incTelegramSends)(1);
+                    try {
+                        logger_1.logger.info({ event: 'tg_send_ok', chatId, hasThread: Boolean(body.message_thread_id) });
+                    }
+                    catch { }
                     return;
                 }
+                try {
+                    logger_1.logger.warn({ event: 'tg_send_fail', chatId, hasThread: Boolean(body.message_thread_id), description: data?.description });
+                }
+                catch { }
                 const retryAfter = Number(data?.parameters?.retry_after || 0);
                 if (retryAfter > 0 && attempts < 3) {
                     await new Promise(r => setTimeout(r, Math.min((retryAfter + 1) * 1000, 15000)));
@@ -86,8 +98,16 @@ async function sendTelegramTextInThread(botToken, chatId, threadId, text) {
                 const data = await res.json();
                 if (data && data.ok === true) {
                     (0, metrics_1.incTelegramSends)(1);
+                    try {
+                        logger_1.logger.info({ event: 'tg_send_ok', chatId, threadId });
+                    }
+                    catch { }
                     return;
                 }
+                try {
+                    logger_1.logger.warn({ event: 'tg_send_fail', chatId, threadId, description: data?.description });
+                }
+                catch { }
                 const retryAfter = Number(data?.parameters?.retry_after || 0);
                 if (retryAfter > 0 && attempts < 3) {
                     await new Promise(r => setTimeout(r, Math.min((retryAfter + 1) * 1000, 15000)));
@@ -104,6 +124,13 @@ async function sendTelegramTextInThread(botToken, chatId, threadId, text) {
             return;
         }
     }
+}
+// Enqueue variants for durability
+async function enqueueTelegramText(tenantId, chatId, text, key) {
+    await (0, outbox_1.enqueueOutbox)(tenantId, 'telegram_send', { chatId, text }, key);
+}
+async function enqueueTelegramTextInThread(tenantId, chatId, threadId, text, key) {
+    await (0, outbox_1.enqueueOutbox)(tenantId, 'telegram_send', { chatId, text, message_thread_id: threadId }, key);
 }
 async function createTelegramForumTopic(botToken, chatId, name) {
     const url = `https://api.telegram.org/bot${botToken}/createForumTopic`;

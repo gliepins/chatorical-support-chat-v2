@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createConversation = createConversation;
 exports.listMessages = listMessages;
 exports.getConversationById = getConversationById;
+exports.countActiveConversations = countActiveConversations;
 exports.findConversationByThreadId = findConversationByThreadId;
 exports.createConversationWithThread = createConversationWithThread;
 exports.addAgentOutboundMessage = addAgentOutboundMessage;
@@ -31,6 +32,11 @@ async function listMessages(tenantId, conversationId) {
 async function getConversationById(tenantId, conversationId) {
     const prisma = (0, client_1.getPrisma)();
     return prisma.conversation.findFirst({ where: { tenantId, id: conversationId } });
+}
+async function countActiveConversations(tenantId) {
+    const prisma = (0, client_1.getPrisma)();
+    // Active = not CLOSED and not BLOCKED
+    return prisma.conversation.count({ where: { tenantId, status: { notIn: ['CLOSED', 'BLOCKED'] } } });
 }
 async function findConversationByThreadId(tenantId, threadId) {
     const prisma = (0, client_1.getPrisma)();
@@ -65,7 +71,8 @@ async function addAgentInboundMessage(tenantId, conversationId, text) {
     if (!trimmed)
         return null;
     const msg = await prisma.message.create({
-        data: { tenantId, conversationId, direction: 'INBOUND', text: trimmed },
+        // "Agent inbound" to the system is "OUTBOUND" to the customer UI
+        data: { tenantId, conversationId, direction: 'OUTBOUND', text: trimmed },
     });
     // Agent responded (inbound to customer), still update lastAgentAt
     await prisma.conversation.update({ where: { id: conversationId }, data: { lastAgentAt: new Date() } });

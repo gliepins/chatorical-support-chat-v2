@@ -7,7 +7,6 @@ exports.startRedisHub = startRedisHub;
 exports.publishToConversation = publishToConversation;
 const ioredis_1 = __importDefault(require("ioredis"));
 const env_1 = require("../config/env");
-const kv_1 = require("../redis/kv");
 const logger_1 = require("../telemetry/logger");
 const hub_1 = require("./hub");
 let publisher = null;
@@ -23,8 +22,10 @@ function startRedisHub() {
         return;
     started = true;
     try {
-        publisher = (0, kv_1.getRedis)();
-        subscriber = (0, kv_1.getRedis)();
+        // Use separate Redis connections for pub and sub. A subscriber connection
+        // cannot be used for publish commands.
+        publisher = new ioredis_1.default(env_1.CONFIG.redisUrl);
+        subscriber = new ioredis_1.default(env_1.CONFIG.redisUrl);
         const pattern = `${env_1.CONFIG.redisKeyPrefix}ws:conv:*`;
         subscriber.on('end', () => { try {
             logger_1.logger.warn({ event: 'redis_subscriber_end' });

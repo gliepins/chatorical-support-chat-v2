@@ -8,6 +8,7 @@
     "dev": "nodemon --watch src --ext ts,tsx,json --exec \"node -r ts-node/register src/index.ts\"",
     "build": "tsc -p .",
     "start": "node dist/index.js",
+    "start:worker": "node dist/worker/runOutbox.js",
     "test:metrics": "node -r ts-node/register scripts/test_metrics.ts",
     "test:ws-local": "node -r ts-node/register scripts/test_ws_local.ts",
     "test:auth-ip": "node -r ts-node/register scripts/test_auth_ip.ts",
@@ -33,7 +34,15 @@
     "test:public-start-flag": "node -r ts-node/register scripts/test_public_start_flag.ts",
     "test:public-v2-ws-token": "node -r ts-node/register scripts/test_public_v2_ws_token.ts",
     "test:public-send": "node -r ts-node/register scripts/test_public_send_message.ts",
-    "test:all": "npm run -s test:metrics && npm run -s test:ws-local && npm run -s test:auth-ip && npm run -s test:apikey && npm run -s test:telegram-retry && npm run -s test:admin-telegram && npm run -s test:public-cross-tenant && npm run -s test:outbox && npm run -s test:admin-templates && npm run -s test:template-preview && npm run -s test:e2e-telegram && npm run -s test:e2e-ws && npm run -s test:i18n"
+    "test:all": "npm run -s test:metrics && npm run -s test:ws-local && npm run -s test:auth-ip && npm run -s test:apikey && npm run -s test:telegram-retry && npm run -s test:admin-telegram && npm run -s test:public-cross-tenant && npm run -s test:outbox && npm run -s test:admin-templates && npm run -s test:template-preview && npm run -s test:e2e-telegram && npm run -s test:e2e-ws && npm run -s test:i18n",
+    "plans:seed": "node -r ts-node/register src/scripts/plan_seed.ts",
+    "plans:list": "node -r ts-node/register src/scripts/plan_list.ts",
+    "plans:sync-stripe": "node -r ts-node/register src/scripts/plan_sync_stripe.ts",
+    "plans:deactivate": "node -r ts-node/register src/scripts/plan_deactivate.ts",
+    "usage:summary": "node -r ts-node/register src/scripts/usage_summary.ts",
+    "release:widget": "node scripts/releaseWidget.js",
+    "dev:widget": "CONVERSATION_JWT_SECRET=testsecret_that_is_long_enough FEATURE_REDIS_PUBSUB=false PORT=4022 BIND_HOST=127.0.0.1 node scripts/runWidgetLocal.js",
+    "test:browser-widget": "node -r ts-node/register scripts/test_browser_e2e_widget.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",
@@ -41,24 +50,24 @@
     "dotenv": "^16.4.5",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
-    "ws": "^8.18.0",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
     "pino": "^9.10.0",
     "pino-http": "^10.5.0",
-    "uuid": "^9.0.1"
+    "stripe": "^16.10.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "prisma": "^6.16.2",
-    "@types/express": "^5.0.3",
     "@types/cors": "^2.8.19",
-    "@types/ws": "^8.18.1",
+    "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.5.2",
+    "@types/ws": "^8.18.1",
     "nodemon": "^3.1.10",
+    "prisma": "^6.16.2",
+    "puppeteer": "^22.15.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   }
 }
-
-

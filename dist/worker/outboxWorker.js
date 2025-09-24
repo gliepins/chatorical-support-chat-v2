@@ -14,11 +14,16 @@ async function processOnce() {
         if (item.type === 'telegram_send') {
             const { tenantId, payload } = item;
             const prisma = (0, client_1.getPrisma)();
-            const ch = await (0, tracing_1.runWithSpan)('outbox.lookupChannel', () => prisma.channel.findFirst({ where: { tenantId, type: 'telegram' } }), { tenant_id: tenantId });
+            const ch = await (0, tracing_1.runWithSpan)('outbox.lookupChannel', () => prisma.channel.findFirst({ where: { tenantId, type: 'telegram' }, orderBy: { updatedAt: 'desc' } }), { tenant_id: tenantId });
             if (!ch)
                 throw new Error('telegram_channel_missing');
             const cfg = (0, crypto_1.decryptJsonEnvelope)(ch.encConfig);
-            await (0, tracing_1.runWithSpan)('outbox.sendTelegramText', () => (0, adapter_1.sendTelegramText)(cfg.botToken, payload.chatId, payload.text), { chat_id: payload.chatId });
+            if (typeof payload.message_thread_id === 'number') {
+                await (0, tracing_1.runWithSpan)('outbox.sendTelegramTextInThread', () => (0, adapter_1.sendTelegramTextInThread)(cfg.botToken, payload.chatId, payload.message_thread_id, payload.text), { chat_id: payload.chatId, thread_id: payload.message_thread_id });
+            }
+            else {
+                await (0, tracing_1.runWithSpan)('outbox.sendTelegramText', () => (0, adapter_1.sendTelegramText)(cfg.botToken, payload.chatId, payload.text), { chat_id: payload.chatId });
+            }
         }
         await (0, outbox_1.markDone)(item.id);
     }

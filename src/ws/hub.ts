@@ -1,5 +1,6 @@
 import { WebSocket } from 'ws';
-import { incWsOutbound } from '../telemetry/metrics';
+import { incWsOutbound, incWsOutboundForTenant } from '../telemetry/metrics';
+import { getPrisma } from '../db/client';
 
 const conversationIdToClients = new Map<string, Set<WebSocket>>();
 
@@ -26,6 +27,13 @@ export function broadcastToConversation(conversationId: string, payload: unknown
   for (const ws of set) {
     try { ws.send(data); incWsOutbound(1); } catch {}
   }
+  // Lightweight tenant counter (best effort)
+  try {
+    const prisma = getPrisma();
+    prisma.conversation.findUnique({ where: { id: conversationId } }).then((conv: any) => {
+      if (conv && conv.tenantId) incWsOutboundForTenant(conv.tenantId, 1);
+    }).catch(() => {});
+  } catch {}
 }
 
 

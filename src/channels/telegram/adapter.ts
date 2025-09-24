@@ -2,6 +2,8 @@ import { getPrisma } from '../../db/client';
 import { encryptJsonEnvelope, decryptJsonEnvelope } from '../../services/crypto';
 // Use global fetch in Node 18+; fallback to dynamic import if needed
 const fetchFn: any = (globalThis as any).fetch ? (globalThis as any).fetch.bind(globalThis) : undefined;
+import { logger } from '../../telemetry/logger';
+import { enqueueOutbox } from '../../services/outbox';
 import { incTelegramErrors, incTelegramSends } from '../../telemetry/metrics';
 
 type TelegramConfig = {
@@ -51,8 +53,10 @@ export async function sendTelegramText(botToken: string, chatId: string | number
         const data = await res.json();
         if (data && data.ok === true) {
           incTelegramSends(1);
+          try { logger.info({ event: 'tg_send_ok', chatId, hasThread: Boolean(body.message_thread_id) }); } catch {}
           return;
         }
+        try { logger.warn({ event: 'tg_send_fail', chatId, hasThread: Boolean(body.message_thread_id), description: data?.description }); } catch {}
         const retryAfter = Number(data?.parameters?.retry_after || 0);
         if (retryAfter > 0 && attempts < 3) {
           await new Promise(r => setTimeout(r, Math.min((retryAfter + 1) * 1000, 15000)));
@@ -85,8 +89,10 @@ export async function sendTelegramTextInThread(botToken: string, chatId: string 
         const data = await res.json();
         if (data && data.ok === true) {
           incTelegramSends(1);
+          try { logger.info({ event: 'tg_send_ok', chatId, threadId }); } catch {}
           return;
         }
+        try { logger.warn({ event: 'tg_send_fail', chatId, threadId, description: data?.description }); } catch {}
         const retryAfter = Number(data?.parameters?.retry_after || 0);
         if (retryAfter > 0 && attempts < 3) {
           await new Promise(r => setTimeout(r, Math.min((retryAfter + 1) * 1000, 15000)));
@@ -102,6 +108,15 @@ export async function sendTelegramTextInThread(botToken: string, chatId: string 
       return;
     }
   }
+}
+
+// Enqueue variants for durability
+export async function enqueueTelegramText(tenantId: string, chatId: string | number, text: string, key?: string): Promise<void> {
+  await enqueueOutbox(tenantId, 'telegram_send', { chatId, text }, key);
+}
+
+export async function enqueueTelegramTextInThread(tenantId: string, chatId: string | number, threadId: number, text: string, key?: string): Promise<void> {
+  await enqueueOutbox(tenantId, 'telegram_send', { chatId, text, message_thread_id: threadId }, key);
 }
 
 export async function createTelegramForumTopic(botToken: string, chatId: string | number, name: string): Promise<number | undefined> {
