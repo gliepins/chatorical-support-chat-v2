@@ -17,6 +17,16 @@ set -a
 . "$ENV_FILE_LOCAL"
 set +a
 
+# Auto-generate secrets if missing
+if [[ -z "${WEBHOOK_SECRET:-}" ]]; then
+  WEBHOOK_SECRET="$(openssl rand -hex 32)"
+  export WEBHOOK_SECRET
+fi
+if [[ -z "${HEADER_SECRET:-}" ]]; then
+  HEADER_SECRET="$(openssl rand -hex 32)"
+  export HEADER_SECRET
+fi
+
 # Load system env for DATABASE_URL etc. if not already set
 if [[ -z "${DATABASE_URL:-}" && -r "$ENV_FILE_SYSTEM" ]]; then
   set -a
@@ -38,6 +48,7 @@ fi
 cd "$PROJECT_ROOT"
 
 # Run the enrollment TypeScript script; it will use env vars from this shell
+WEBHOOK_BASE="${WEBHOOK_BASE:-${PUBLIC_ORIGIN:-}}" \
 npx -y ts-node src/scripts/enroll_tenant.ts
 
 
