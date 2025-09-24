@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { getPrisma } from '../db/client';
+import { CONFIG } from '../config/env';
 
 export type TenantContext = { tenantId: string };
 
@@ -36,7 +37,8 @@ export async function resolveTenantContextAsync(req: Request): Promise<TenantCon
     }
   } catch {}
   const header = req.header('x-tenant-id');
-  const slug = (header && header.trim()) || 'default';
+  const slug = (header && header.trim()) || (CONFIG.featureTenantEnforced ? '' : 'default');
+  if (!slug) throw new Error('tenant_missing');
   const tenantId = await getTenantIdBySlug(slug);
   return { tenantId };
 }
@@ -44,7 +46,7 @@ export async function resolveTenantContextAsync(req: Request): Promise<TenantCon
 export function tenantContext(req: Request, res: Response, next: NextFunction) {
   resolveTenantContextAsync(req)
     .then((tc) => { (req as any).tenant = tc; next(); })
-    .catch(() => res.status(400).json({ error: 'tenant_not_found' }));
+    .catch((_e) => res.status(400).json({ error: { code: 'tenant_not_found' } }));
 }
 
 

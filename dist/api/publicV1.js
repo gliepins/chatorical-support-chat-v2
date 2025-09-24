@@ -69,6 +69,10 @@ router.post('/v1/conversations/start', (0, rateLimit_1.dynamicIpRateLimit)('star
         }
         catch { }
         const conv = await (0, conversationRepo_4.createConversation)(tenantId, name, locale);
+        try {
+            res.setHeader('x-tenant-resolved', tenantId);
+        }
+        catch { }
         // Ensure Telegram topic at start (v1 parity). Ignore errors to avoid blocking start.
         try {
             await (0, topic_1.ensureTopicForConversation)(tenantId, conv.id);
@@ -80,7 +84,7 @@ router.post('/v1/conversations/start', (0, rateLimit_1.dynamicIpRateLimit)('star
         catch { }
         const ipHash = (0, auth_1.hashIp)((req.ip || '').toString());
         const token = (0, auth_1.signConversationToken)(tenantId, conv.id, ipHash);
-        return res.json({ conversation_id: conv.id, token, codename: conv.codename });
+        return res.json({ conversation_id: conv.id, token, codename: conv.codename, tenant_id: tenantId });
     }
     catch (e) {
         return res.status(400).json({ error: { code: 'bad_request', message: e?.message || 'bad request' } });
@@ -88,7 +92,9 @@ router.post('/v1/conversations/start', (0, rateLimit_1.dynamicIpRateLimit)('star
 });
 router.get('/v1/conversations/:id/messages', async (req, res) => {
     try {
-        const tenantId = req.tenant?.tenantId || 'default';
+        // Prefer tenant from authenticated conversation token if available
+        const convAuth = req.conversation;
+        const tenantId = convAuth?.tenantId || req.tenant?.tenantId || 'default';
         const conv = await (0, conversationRepo_4.getConversationById)(tenantId, req.params.id);
         if (!conv)
             return res.status(404).json({ error: { code: 'not_found' } });
@@ -103,6 +109,10 @@ router.get('/v1/conversations/:id/messages', async (req, res) => {
                     filtered = msgs.filter((m) => new Date(m.createdAt).getTime() > sinceMs);
                 }
             }
+        }
+        catch { }
+        try {
+            res.setHeader('x-tenant-resolved', tenantId);
         }
         catch { }
         return res.json({ status: 'OPEN_UNCLAIMED', messages: filtered });
@@ -153,7 +163,9 @@ router.patch('/v1/conversations/:id/name', (0, rateLimit_1.dynamicIpRateLimit)('
 // POST /v1/conversations/:id/messages — customer sends a message (JWT required)
 router.post('/v1/conversations/:id/messages', conversationAuth_1.requireConversationAuth, async (req, res) => {
     try {
-        const tenantId = req.tenant?.tenantId || 'default';
+        // Prefer tenant from conversation token to avoid header/proxy ambiguity
+        const convAuth = req.conversation;
+        const tenantId = convAuth?.tenantId || req.tenant?.tenantId || 'default';
         const id = req.params.id;
         const { text } = (req.body || {});
         // Enforce plan-based daily message limit (tenant-wide)
@@ -176,6 +188,10 @@ router.post('/v1/conversations/:id/messages', conversationAuth_1.requireConversa
         }
         catch { }
         const msg = await (0, conversationRepo_2.addCustomerInboundMessage)(tenantId, id, String(text || ''));
+        try {
+            res.setHeader('x-tenant-resolved', tenantId);
+        }
+        catch { }
         // Record usage after successful persist
         try {
             await (0, usage_1.incrDailyMessages)(tenantId, null);
@@ -231,9 +247,10 @@ router.post('/v1/conversations/:id/messages', conversationAuth_1.requireConversa
                             catch { }
                         }
                     }
-                    // Enqueue for durable delivery (outbox worker):
+                    // Enqueue for durable delivery (outbox worker) with idempotency key per customer message
+                    const idemKey = `conv_msg_out_${msg?.id || 'unknown'}`;
                     try {
-                        await (0, adapter_1.enqueueTelegramTextInThread)(tenantId, cfg.supportGroupId, Number(maybeThreadId), String(text || ''));
+                        await (0, adapter_1.enqueueTelegramTextInThread)(tenantId, cfg.supportGroupId, Number(maybeThreadId), String(text || ''), idemKey);
                     }
                     catch {
                         await (0, adapter_1.sendTelegramTextInThread)(cfg.botToken, cfg.supportGroupId, maybeThreadId, String(text || ''));

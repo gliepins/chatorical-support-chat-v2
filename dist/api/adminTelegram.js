@@ -101,6 +101,27 @@ router.post('/v1/admin/telegram/verify', (0, serviceAuth_1.requireServiceOrApiKe
         return res.status(500).json({ error: { code: 'internal_error', message: e?.message } });
     }
 });
+// DEBUG: service-token only. Returns telegram channel secrets for troubleshooting on stage.
+// POST /v1/admin/telegram/debug { tenantSlug }
+router.post('/v1/admin/telegram/debug', serviceAuth_1.requireServiceAuth, async (req, res) => {
+    try {
+        const { tenantSlug } = (req.body || {});
+        if (!tenantSlug)
+            return res.status(400).json({ error: { code: 'missing_params' } });
+        const prisma = (0, client_1.getPrisma)();
+        const t = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+        if (!t)
+            return res.status(404).json({ error: { code: 'tenant_not_found' } });
+        const ch = await prisma.channel.findFirst({ where: { tenantId: t.id, type: 'telegram' }, orderBy: { updatedAt: 'desc' } });
+        if (!ch)
+            return res.status(404).json({ error: { code: 'telegram_channel_not_found' } });
+        const cfg = (0, crypto_1.decryptJsonEnvelope)(ch.encConfig);
+        return res.json({ tenantId: t.id, webhookSecret: ch.webhookSecret, headerSecret: ch.headerSecret, supportGroupId: cfg.supportGroupId });
+    }
+    catch (e) {
+        return res.status(500).json({ error: { code: 'internal_error', message: e?.message } });
+    }
+});
 // POST /v1/admin/conversations/set-thread { tenantSlug, conversationId, threadId }
 router.post('/v1/admin/conversations/set-thread', (0, serviceAuth_1.requireServiceOrApiKey)(['admin:write']), async (req, res) => {
     try {
